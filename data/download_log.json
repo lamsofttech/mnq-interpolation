@@ -1,0 +1,14 @@
+[
+  {
+    "downloaded_at_utc": "2026-11-16T16:03:40+00:00",
+    "ticker": "MNQ=F",
+    "interval": "1m",
+    "bars_downloaded": 28295,
+    "bars_in_file": 28295,
+    "first_bar_utc": "2026-10-18 22:10:00+00:00",
+    "last_bar_utc": "2026-11-16 15:53:00+00:00",
+    "yfinance": "1.8.0",
+    "pandas": "2.3.3",
+    "python": "3.13.15"
+  }
+]
