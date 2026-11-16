@@ -3,10 +3,8 @@ title: MNQ Interpolation Methods
 emoji: 📈
 colorFrom: blue
 colorTo: indigo
-sdk: gradio
-sdk_version: 5.50.0
-python_version: "3.12"
-app_file: app.py
+sdk: static
+app_file: index.html
 pinned: false
 short_description: Four interpolation methods on intraday MNQ prices
 ---
@@ -22,8 +20,10 @@ This project compares linear interpolation, natural cubic splines, PCHIP (piecew
 | File | Purpose |
 |---|---|
 | `interpolation_project.ipynb` | The full analysis with explanations, tables, and figures |
-| `interpolation.py` | The methods and the experiment, shared with the app |
-| `app.py` | The interactive Hugging Face app |
+| `interpolation.py` | The methods and the experiment, shared by the app and the web page |
+| `figures.py` | The charts, shared by the app and the web page |
+| `index.html`, `web.py` | The Hugging Face page: runs the Python code in the browser with Pyodide |
+| `app.py` | A Gradio version of the app for running on your own computer |
 | `download_mnq.py` | Downloads MNQ 1-minute bars from Yahoo Finance into `data/` |
 | `data/mnq_1m_raw.csv` | The saved data snapshot |
 | `data/download_log.json` | When and how the data were downloaded |
@@ -40,6 +40,8 @@ Or open `interpolation_project.ipynb` in VS Code or Jupyter and choose Run All.
 
 ## Deployment
 
-Every push to the `main` branch on GitHub runs `.github/workflows/sync-to-hugging-face.yml`, which copies the repository to the Hugging Face Space. The Space then rebuilds and runs `app.py`.
+The Hugging Face Space is a free static Space that serves `index.html`. The page loads Pyodide (Python compiled for the browser), copies in `interpolation.py`, `figures.py`, `web.py`, and the data snapshot, and runs the full experiment in the visitor's browser in under a minute.
+
+Every push to the `main` branch on GitHub runs `.github/workflows/sync-to-hugging-face.yml`, which copies the repository to the Space.
 
 Market data come from Yahoo Finance and are used for educational purposes only. Nothing here is trading or investment advice.

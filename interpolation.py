@@ -121,23 +121,37 @@ def split_nodes(day, h):
 
 # ---------------- Experiment ----------------
 
+def run_day(d, day, timing_repeats=3):
+    """Reconstruct one day's hidden prices with every method and spacing."""
+    rows, timings = [], []
+    for h in SPACINGS:
+        xn, yn, xt, yt = split_nodes(day, h)
+        gap = np.searchsorted(xn, xt) - 1
+        for name, f in METHODS.items():
+            runs = []
+            for _ in range(timing_repeats):
+                start = time.perf_counter()
+                est = f(xn, yn, xt)
+                runs.append(time.perf_counter() - start)
+            timings.append({"date": d, "h": h, "method": name, "seconds": np.median(runs)})
+            rows.append(pd.DataFrame({
+                "date": d, "h": h, "method": name, "minute": xt, "true": yt, "est": est,
+                "gap": gap, "left_node": yn[gap], "right_node": yn[gap + 1],
+            }))
+    return rows, timings
+
+
 def run_experiment(data, timing_repeats=3):
     rows, timings = [], []
     for d, day in data.groupby("date"):
-        for h in SPACINGS:
-            xn, yn, xt, yt = split_nodes(day, h)
-            gap = np.searchsorted(xn, xt) - 1
-            for name, f in METHODS.items():
-                runs = []
-                for _ in range(timing_repeats):
-                    start = time.perf_counter()
-                    est = f(xn, yn, xt)
-                    runs.append(time.perf_counter() - start)
-                timings.append({"date": d, "h": h, "method": name, "seconds": np.median(runs)})
-                rows.append(pd.DataFrame({
-                    "date": d, "h": h, "method": name, "minute": xt, "true": yt, "est": est,
-                    "gap": gap, "left_node": yn[gap], "right_node": yn[gap + 1],
-                }))
+        day_rows, day_timings = run_day(d, day, timing_repeats)
+        rows += day_rows
+        timings += day_timings
+    return finish_results(rows, timings)
+
+
+def finish_results(rows, timings):
+    """Combine per-day output and add the error, overshoot, and session-window columns."""
     res = pd.concat(rows, ignore_index=True)
     res["error"] = res["est"] - res["true"]
     lo = np.minimum(res["left_node"], res["right_node"]) - 1e-9
@@ -184,6 +198,21 @@ def window_volatility(data):
         in_win = data[(data["minute"] >= a) & (data["minute"] < b)]
         vol[label] = float(in_win.groupby("date")["Close"].diff().std())
     return vol
+
+
+def summarize(data, info, res, timing):
+    """Everything the app and the browser page display, from finished experiment results."""
+    t1, t2, t3, daily, beats = summary_tables(res, timing)
+    vol = window_volatility(data)
+    return {"data": data, "info": info, "res": res, "t1": t1, "t2": t2, "t3": t3, "daily": daily,
+            "vol": vol, "findings": findings(t1, t3, beats, vol)}
+
+
+def describe_data(info):
+    excluded = ", ".join(f"{d} ({n} bars)" for d, n in info["days_excluded"].items()) or "none"
+    return (f"Data snapshot: {info['raw_bars']:,} one-minute bars from {info['first_bar']} to {info['last_bar']}. "
+            f"Used: {info['days_kept']} full trading days, {info['bars_used']:,} regular-session prices "
+            f"({info['missing_minutes']} missing minutes). Excluded days: {excluded}.")
 
 
 def findings(t1, t3, beats, vol):

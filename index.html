@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MNQ Interpolation Methods</title>
+  <!-- Pyodide runs the project's Python code (web.py, figures.py, interpolation.py) inside the browser,
+       so this works as a free static Hugging Face Space -->
+  <script src="https://cdn.jsdelivr.net/pyodide/v0.27.3/full/pyodide.js"></script>
+  <style>
+    :root {
+      --bg: #ffffff; --surface: #f6f7f9; --text: #1d2330; --muted: #5b6475;
+      --border: #dde1e7; --accent: #2f5da8; --accent-text: #ffffff; --warn: #9a5b00;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg: #14171c; --surface: #1d2129; --text: #e6e9ef; --muted: #a2abbb;
+        --border: #333a46; --accent: #7aa2e8; --accent-text: #0e1116; --warn: #e3a54a;
+      }
+    }
+    :root[data-theme="dark"] {
+      --bg: #14171c; --surface: #1d2129; --text: #e6e9ef; --muted: #a2abbb;
+      --border: #333a46; --accent: #7aa2e8; --accent-text: #0e1116; --warn: #e3a54a;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text);
+           font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 64px; }
+    h1 { font-size: 1.5rem; line-height: 1.3; margin: 0 0 4px; }
+    h2 { font-size: 1.15rem; margin: 28px 0 8px; }
+    .byline, .muted { color: var(--muted); }
+    .status { margin: 16px 0; padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px;
+              background: var(--surface); }
+    .status.error { color: var(--warn); }
+    .tabs { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--border); margin-top: 20px; }
+    .tabs button { font: inherit; padding: 8px 14px; border: 1px solid transparent; border-bottom: none;
+                   background: none; color: var(--muted); cursor: pointer; border-radius: 6px 6px 0 0; }
+    .tabs button[aria-selected="true"] { color: var(--text); border-color: var(--border); background: var(--surface); }
+    .panel { padding-top: 8px; }
+    pre { white-space: pre-wrap; background: var(--surface); border: 1px solid var(--border);
+          border-radius: 8px; padding: 12px; font-size: 13px; overflow-x: auto; }
+    .table-wrap { overflow-x: auto; }
+    table.tbl { border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+    table.tbl th, table.tbl td { border-bottom: 1px solid var(--border); padding: 4px 10px; text-align: right; }
+    table.tbl th { background: var(--surface); }
+    img { max-width: 100%; height: auto; border-radius: 6px; background: #ffffff; margin: 8px 0; }
+    .controls { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; margin: 12px 0; }
+    .controls label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+    select, input[type="range"] { font: inherit; }
+    select { padding: 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); }
+    .methods { display: flex; gap: 12px; flex-wrap: wrap; font-size: 14px; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Comparing Interpolation Methods for Reconstructing Intraday MNQ Futures Prices</h1>
+  <div class="byline">Lameck Nyakweba · Mathematics 5670-08, Fall 2026 · Austin Peay State University</div>
+  <p>Prices are kept every <em>h</em> minutes and the prices in between are hidden. Each method rebuilds them
+    from the kept prices only, and the estimates are compared with the true prices. All the Python code runs
+    inside your browser.</p>
+
+  <div id="status" class="status" role="status">Starting…</div>
+
+  <div id="app" hidden>
+    <p id="summary" class="muted"></p>
+    <div class="tabs" role="tablist">
+      <button role="tab" aria-selected="true" data-panel="results">Results</button>
+      <button role="tab" aria-selected="false" data-panel="explore">Explore a day</button>
+      <button role="tab" aria-selected="false" data-panel="checks">Code checks</button>
+    </div>
+
+    <section id="results" class="panel">
+      <h2>Findings (generated from the data)</h2>
+      <pre id="findings"></pre>
+      <h2>Table 1. Accuracy (index points), overshoot, and speed</h2>
+      <div class="table-wrap" id="t1"></div>
+      <img id="fig_error" alt="RMSE versus spacing on log-log axes for each method">
+      <h2>Table 2. Day-to-day consistency</h2>
+      <div class="table-wrap" id="t2"></div>
+      <img id="fig_box" alt="Boxplots of daily RMSE for each method and spacing">
+      <h2>Table 3. RMSE at the open versus midday</h2>
+      <p class="muted" id="volatility"></p>
+      <div class="table-wrap" id="t3"></div>
+      <img id="fig_prices" alt="MNQ one-minute closing prices for each trading day">
+    </section>
+
+    <section id="explore" class="panel" hidden>
+      <div class="controls">
+        <label>Trading day <select id="date"></select></label>
+        <label>Spacing h (minutes) <select id="h"></select></label>
+        <label>Window start: <span id="start_label">9:30</span>
+          <input id="start" type="range" min="0" max="329" step="1" value="0"></label>
+      </div>
+      <div class="methods" id="methods"></div>
+      <img id="explore_fig" alt="Close-up of the reconstruction for the chosen day and window">
+      <div class="table-wrap" id="explore_table"></div>
+    </section>
+
+    <section id="checks" class="panel" hidden>
+      <p>Before trusting the MNQ results, the code is checked on functions with known answers. On sin x, linear
+        error should shrink with slope 2 and the natural spline with slope 4. On the Runge function, one
+        high-degree polynomial oscillates while local Newton does not.</p>
+      <img id="fig_conv" alt="Convergence of each method on sin x">
+      <img id="fig_runge" alt="Runge phenomenon: global polynomial versus local Newton">
+    </section>
+  </div>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const statusBox = $("status");
+const paint = () => new Promise((resolve) => setTimeout(resolve, 30));
+const say = async (text) => { statusBox.textContent = text; await paint(); };
+const timeLabel = (m) => `${Math.floor((570 + m) / 60)}:${String((570 + m) % 60).padStart(2, "0")}`;
+let web;
+
+async function main() {
+  await say("Starting Python in your browser…");
+  const pyodide = await loadPyodide();
+  await say("Loading numpy, pandas, scipy and matplotlib…");
+  await pyodide.loadPackage(["numpy", "pandas", "scipy", "matplotlib"]);
+
+  await say("Loading the project code and the MNQ data snapshot…");
+  pyodide.FS.mkdirTree("/home/pyodide/data");
+  for (const file of ["interpolation.py", "figures.py", "web.py", "data/mnq_1m_raw.csv"]) {
+    const response = await fetch(file);
+    if (!response.ok) throw new Error(`Could not load ${file} (HTTP ${response.status})`);
+    pyodide.FS.writeFile(`/home/pyodide/${file}`, new Uint8Array(await response.arrayBuffer()));
+  }
+  pyodide.runPython("import sys; sys.path.insert(0, '/home/pyodide')");
+  web = pyodide.pyimport("web");
+
+  const nDays = web.start();
+  for (let i = 0; i < nDays; i++) {
+    const day = web.step(i);
+    await say(`Running the experiment: day ${i + 1} of ${nDays} (${day})…`);
+  }
+  await say("Building tables and figures…");
+  render(JSON.parse(web.finish()));
+  statusBox.hidden = true;
+  $("app").hidden = false;
+}
+
+function render(out) {
+  $("summary").textContent = out.summary;
+  $("findings").textContent = out.findings;
+  $("volatility").textContent = `Volatility: ${out.volatility}.`;
+  for (const id of ["t1", "t2", "t3"]) $(id).innerHTML = out[id];
+  for (const id of ["fig_error", "fig_box", "fig_prices", "fig_conv", "fig_runge"]) $(id).src = out[id];
+
+  $("date").innerHTML = out.dates.map((d) => `<option>${d}</option>`).join("");
+  $("date").value = out.dates[out.dates.length - 1];
+  $("h").innerHTML = out.spacings.map((h) => `<option ${h === 15 ? "selected" : ""}>${h}</option>`).join("");
+  const defaults = ["Linear", "Natural spline", "PCHIP", "Newton deg 5"];
+  $("methods").innerHTML = out.methods.map((m) =>
+    `<label><input type="checkbox" value="${m}" ${defaults.includes(m) ? "checked" : ""}> ${m}</label>`).join("");
+  for (const el of [$("date"), $("h"), $("start"), ...$("methods").querySelectorAll("input")]) {
+    el.addEventListener("change", explore);
+  }
+  $("start").addEventListener("input", () => { $("start_label").textContent = timeLabel(+$("start").value); });
+  explore();
+}
+
+function explore() {
+  const methods = [...$("methods").querySelectorAll("input:checked")].map((el) => el.value);
+  const out = JSON.parse(web.explore($("date").value, +$("h").value, JSON.stringify(methods), +$("start").value));
+  $("explore_fig").src = out.fig;
+  $("explore_table").innerHTML = out.table;
+}
+
+document.querySelectorAll(".tabs button").forEach((button) => {
+  button.addEventListener("click", () => {
+    document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-selected", b === button));
+    document.querySelectorAll(".panel").forEach((p) => { p.hidden = p.id !== button.dataset.panel; });
+  });
+});
+
+main().catch((error) => {
+  statusBox.classList.add("error");
+  statusBox.textContent = `Something went wrong while loading: ${error.message}`;
+  console.error(error);
+});
+</script>
+</body>
+</html>
